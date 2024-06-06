@@ -36,101 +36,134 @@ if 'kpi_data' not in st.session_state:
         'time': ["10:00", "10:05", "10:10", "10:15"]
     }
 
-# Header
-st.title("Preventive Maintenance Plan Dashboard")
+# Initialize previous data for Planned vs Realized Actions
+if 'planned_vs_realized_data' not in st.session_state:
+    months = list(range(1, 13))
+    planned_actions = np.random.randint(20, 50, size=12)
+    realized_actions = planned_actions - np.random.randint(0, 10, size=12)
+    st.session_state.planned_vs_realized_data = pd.DataFrame({
+        'Month': months,
+        'Planned Actions': planned_actions,
+        'Realized Actions': realized_actions
+    })
 
-# Simulate real-time data
-data = generate_real_time_data()
+# Initialize PMP history for calculating percentage change
+if 'previous_pmp_value' not in st.session_state:
+    st.session_state.previous_pmp_value = None
 
-# Update KPI data storage
-current_time = time.strftime("%H:%M:%S")
-st.session_state.kpi_data['mttr'].append(data["mttr"]["Hours"])
-st.session_state.kpi_data['mtbf'].append(data["mtbf"]["Hours"])
-st.session_state.kpi_data['time'].append(current_time)
+def page_1():
+    # Table for Maintenance Actions
+    st.header("Maintenance Actions")
 
-# MTTR and MTBF Visualization
-st.header("Maintenance KPIs")
+    action = st.text_input("Action")
+    frequency = st.number_input("Frequency", min_value=1)
+    maintained = st.checkbox("Maintained")
 
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("Mean Time to Repair (MTTR)")
-    delta_color = "inverse" if data["mttr"]["Percentage Change"] < 0 else "normal"
-    st.metric("MTTR Hours", data["mttr"]["Hours"], f"{data['mttr']['Percentage Change']:.2f}%", delta_color='inverse')
-    st.line_chart(pd.DataFrame({'Time': st.session_state.kpi_data['time'], 'MTTR': st.session_state.kpi_data['mttr']}).set_index('Time'))
+    if st.button("Add Action"):
+        new_action = {'Action': action, 'Frequency': frequency, 'Maintained': maintained}
+        st.session_state.maintenance_actions = st.session_state.maintenance_actions.append(new_action, ignore_index=True)
 
-with col2:
-    st.subheader("Mean Time Between Failures (MTBF)")
-    delta_color = "inverse" if data["mtbf"]["Percentage Change"] < 0 else "normal"
-    st.metric("MTBF Hours", data["mtbf"]["Hours"], f"{data['mtbf']['Percentage Change']:.2f}%", delta_color='inverse')
-    st.line_chart(pd.DataFrame({'Time': st.session_state.kpi_data['time'], 'MTBF': st.session_state.kpi_data['mtbf']}).set_index('Time'))
+    st.dataframe(st.session_state.maintenance_actions)
 
-# OEE Visualization
-st.header("Overall Equipment Effectiveness (OEE)")
+def page_2():
+    # Header
+    st.title("Preventive Maintenance Plan Dashboard")
 
-oee_value = data["oee"]["OEE"]
-quality_value = data["oee"]["Quality"]
-performance_value = data["oee"]["Performance"]
-availability_value = data["oee"]["Availability"]
+    # Simulate real-time data
+    data = generate_real_time_data()
 
-st.metric("OEE", f"{oee_value:.2f}%")
+    # Update KPI data storage
+    current_time = time.strftime("%H:%M:%S")
+    st.session_state.kpi_data['mttr'].append(data["mttr"]["Hours"])
+    st.session_state.kpi_data['mtbf'].append(data["mtbf"]["Hours"])
+    st.session_state.kpi_data['time'].append(current_time)
 
-# Horizontal bar chart for OEE components using Altair
-oee_components = pd.DataFrame({
-    'Component': ['Quality', 'Performance', 'Availability'],
-    'Value': [quality_value, performance_value, availability_value]
-})
+    # MTTR and MTBF Visualization
+    st.header("Maintenance KPIs")
 
-chart = alt.Chart(oee_components).mark_bar().encode(
-    x=alt.X('Value:Q'),
-    y=alt.Y('Component:N', sort='-x'),
-    color=alt.Color('Component:N', scale=alt.Scale(range=['#5a61bd', '#7178df', '#9ca2ef'])),
-    tooltip=['Component', 'Value']
-).properties(
-    width=600,
-    height=300,
-    title='OEE Components'
-).configure_axis(
-    labelColor='white',
-    titleColor='white'
-).configure_view(
-    strokeWidth=0
-).configure_title(
-    color='white'
-).configure(
-    background='#14192F'
-)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.subheader("Mean Time to Repair (MTTR)")
+        delta_color = "inverse" if data["mttr"]["Percentage Change"] < 0 else "normal"
+        st.metric("MTTR Hours", data["mttr"]["Hours"], f"{data['mttr']['Percentage Change']:.2f}%", delta_color='inverse')
+        st.line_chart(pd.DataFrame({'Month': list(range(1, 13)), 'MTTR': np.random.randint(3, 8, size=12)}).set_index('Month'))
 
-st.altair_chart(chart, use_container_width=True)
+    with col2:
+        st.subheader("Mean Time Between Failures (MTBF)")
+        delta_color = "inverse" if data["mtbf"]["Percentage Change"] < 0 else "normal"
+        st.metric("MTBF Hours", data["mtbf"]["Hours"], f"{data['mtbf']['Percentage Change']:.2f}%", delta_color='inverse')
+        st.line_chart(pd.DataFrame({'Month': list(range(1, 13)), 'MTBF': np.random.randint(8, 15, size=12)}).set_index('Month'))
 
-# Table for Maintenance Actions
-st.header("Maintenance Actions")
+    with col3:
+        st.subheader("Planned Maintenance Percentage (PMP)")
+        planned_vs_realized = st.session_state.planned_vs_realized_data
+        planned_actions = planned_vs_realized['Planned Actions'].sum()
+        realized_actions = planned_vs_realized['Realized Actions'].sum()
+        if planned_actions > 0:
+            pmp_value = (realized_actions / planned_actions) * 100
+        else:
+            pmp_value = 0
 
-action = st.text_input("Action")
-frequency = st.number_input("Frequency", min_value=1)
-maintained = st.checkbox("Maintained")
+        if st.session_state.previous_pmp_value is not None:
+            pmp_percentage_change = ((pmp_value - st.session_state.previous_pmp_value) / st.session_state.previous_pmp_value) * 100
+        else:
+            pmp_percentage_change = 0
 
-if st.button("Add Action"):
-    new_action = {'Action': action, 'Frequency': frequency, 'Maintained': maintained}
-    st.session_state.maintenance_actions = st.session_state.maintenance_actions.append(new_action, ignore_index=True)
+        st.session_state.previous_pmp_value = pmp_value
 
-st.dataframe(st.session_state.maintenance_actions)
+        delta_color = "inverse" if pmp_percentage_change < 0 else "normal"
+        st.metric("PMP", f"{pmp_value:.2f}%", f"{pmp_percentage_change:.2f}%", delta_color=delta_color)
 
-# Planned and Realized Actions Curve
-st.header("Planned vs Realized Actions")
-planned_actions = st.session_state.maintenance_actions['Frequency'].sum()
-realized_actions = st.session_state.maintenance_actions[st.session_state.maintenance_actions['Maintained'] == True]['Frequency'].sum()
-planned_vs_realized = pd.DataFrame({'Planned Actions': [planned_actions], 'Realized Actions': [realized_actions]})
+        st.line_chart(planned_vs_realized.set_index('Month'))
 
-st.line_chart(planned_vs_realized)
+    # OEE Visualization
+    st.header("Overall Equipment Effectiveness (OEE)")
 
-# PMP Calculation
-st.header("Planned Maintenance Percentage (PMP)")
-if planned_actions > 0:
-    pmp_value = (realized_actions / planned_actions) * 100
+    oee_value = data["oee"]["OEE"]
+    quality_value = data["oee"]["Quality"]
+    performance_value = data["oee"]["Performance"]
+    availability_value = data["oee"]["Availability"]
+
+    st.metric("OEE", f"{oee_value:.2f}%")
+
+    # Horizontal bar chart for OEE components using Altair
+    oee_components = pd.DataFrame({
+        'Component': ['Quality', 'Performance', 'Availability'],
+        'Value': [quality_value, performance_value, availability_value]
+    })
+
+    chart = alt.Chart(oee_components).mark_bar().encode(
+        x=alt.X('Value:Q'),
+        y=alt.Y('Component:N', sort='-x'),
+        color=alt.Color('Component:N', scale=alt.Scale(range=['#5a61bd', '#7178df', '#9ca2ef'])),
+        tooltip=['Component', 'Value']
+    ).properties(
+        width=600,
+        height=300,
+        title='OEE Components'
+    ).configure_axis(
+        labelColor='white',
+        titleColor='white'
+    ).configure_view(
+        strokeWidth=0,
+        fill='#14192F'
+    ).configure_title(
+        color='white'
+    ).configure_legend(
+        titleColor='white',
+        labelColor='white'
+    )
+
+    st.altair_chart(chart, use_container_width=True)
+
+    # Wait for a while before updating the data
+    time.sleep(30)
+    st.experimental_rerun()
+
+# Page navigation
+page = st.sidebar.selectbox("Select a page", ["Page 1", "Page 2"])
+
+if page == "Page 1":
+    page_1()
 else:
-    pmp_value = 0
-
-st.metric("PMP", f"{pmp_value:.2f}%")
-
-# Wait for a while before updating the data
-time.sleep(5)
+    page_2()
